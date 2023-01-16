@@ -249,7 +249,7 @@ def get_our_stock_data(chrome_driver_path: str,
     our_products_cards_info = pd.DataFrame()
 
     try:
-        # парсинг данных с джейсона карточки
+        # парсинг данных с карточки
         for i in range(wb_stock.shape[0]):
             # получение ссылки на json с описанием товара
             print(f'{i} {wb_stock.url[i]}')
@@ -280,8 +280,7 @@ def get_our_stock_data(chrome_driver_path: str,
                 continue
 
             data = json.loads(json_data)
-            products_cards_info_temp = pd.json_normalize(data)
-            our_products_cards_info = pd.concat([our_products_cards_info, products_cards_info_temp])
+            our_products_cards_info = pd.concat([our_products_cards_info, pd.json_normalize(data)])
 
             sleep(1)
 
@@ -390,13 +389,21 @@ def parse_product_cards_data_json(prod_list: pd.DataFrame):
     return product_cards_info
 
 
-def parse_product_cards_data(prod_list: pd.DataFrame, chrome_driver_path: str) -> pd.DataFrame:
+def parse_product_cards_data(prod_list: pd.DataFrame,
+                             chrome_driver_path: str,
+                             param_price_with_disc=True,
+                             param_seller_name=False,
+                             param_json_src=False) -> pd.DataFrame:
     """
     Функция для парсинга параметров товаров, которые можно достать из карточки на сайте WB.
     Сейчас парсятся цена со сидкой и название продавца.
 
     :param prod_list: датафрейм в котором есть колонка url - урл карточки
     :param chrome_driver_path: путь до исполняемого файла хром драйвера
+    :param param_price_with_disc: собирать или нет цену с карточки
+    :param param_seller_name: собирать или нет название продавца
+    :param param_json_src: собирать или нет адрес джейсона с данными о товаре
+
     :return: исходный датафрейм + параметры с карточки WB
     """
 
@@ -408,32 +415,38 @@ def parse_product_cards_data(prod_list: pd.DataFrame, chrome_driver_path: str) -
     options.add_argument('--disable-dev-shm-usage')
     driver = webdriver.Chrome(chrome_driver_path, chrome_options=options)
 
-    try:
-        # сбор цены и названия продавца с катрочки на сайте
-        prod_list['seller_name'] = ''
+    if param_price_with_disc:
         prod_list['price_with_disc'] = 0
+    if param_seller_name:
+        prod_list['seller_name'] = ''
+    if param_json_src:
+        prod_list['json_src'] = ''
 
+    try:
         for i in range(prod_list.shape[0]):
             driver.get(prod_list.url[i])
             sleep(2)
             html_data = BeautifulSoup(driver.page_source, 'html5lib')
 
-            final_price_elem = html_data.find(class_='price-block__final-price')
-            if final_price_elem is None:
-                final_price = 0
-            else:
-                final_price = int(re.sub("[^0-9]", "", final_price_elem.text))
+            if param_price_with_disc:
+                final_price_elem = html_data.find(class_='price-block__final-price')
+                if final_price_elem is None:
+                    prod_list.price_with_disc[i] = 0
+                else:
+                    prod_list.price_with_disc[i] = int(re.sub("[^0-9]", "", final_price_elem.text))
 
-            seller_info_elem = html_data.find(class_='seller-info__name')
-            if seller_info_elem is None:
-                seller_name = ''
-            else:
-                seller_name = seller_info_elem.text
+            if param_seller_name:
+                seller_info_elem = html_data.find(class_='seller-info__name')
+                if seller_info_elem is None:
+                    prod_list.seller_name[i] = ''
+                else:
+                    prod_list.seller_name[i] = seller_info_elem.text
 
-            prod_list.price_with_disc[i] = final_price
-            prod_list.seller_name[i] = seller_name
+            if param_json_src:
+                img_src = html_data.find(class_='slide__content img-plug j-wba-card-item').img['src']
+                prod_list.json_src[i] = 'https:' + img_src.split('images')[0] + 'info/ru/card.json'
 
-            print(f'{i} {prod_list.url[i]} {prod_list.price_with_disc[i]}')
+            print(f'{i} {prod_list.url[i]}')
 
     except Exception as error:
         print(error)
