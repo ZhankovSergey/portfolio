@@ -5,7 +5,6 @@ from datetime import datetime
 from os import getenv
 from dotenv import load_dotenv
 load_dotenv()
-
 MODULES_DIR = getenv('MODULES_DIR')
 CHROME_DRIVER_PATH = getenv('CHROME_DRIVER_PATH')
 PG_BF_USER_ENGINE = getenv('PG_BF_USER_ENGINE')
@@ -45,28 +44,26 @@ t1 = PythonOperator(task_id='wb_save_our_stock_data',
                     op_kwargs={
                         'db_creds': PG_BF_USER_ENGINE,
                         'chrome_driver_path': CHROME_DRIVER_PATH,
-                        'pkl_backup_path': '/home/analyst1/www/price_monitor/wb_our_stock_data.pkl'
+                        'pkl_backup_path': '/home/analyst1/www/price_monitor/wb/wb_our_stock_data.pkl'
                     },
                     dag=dag)
 
 t2 = PythonOperator(task_id='wb_save_product_list_from_cat_pages',
                     python_callable=monitor_tools_wb.save_product_list_from_cat_pages,
                     op_kwargs={
-                        'db_creds': PG_BF_USER_ENGINE,
-                        'db_name': 'monitor_wb_prod_list',
                         'chrome_driver_path': CHROME_DRIVER_PATH,
-                        'pkl_backup_path': '/home/analyst1/www/price_monitor/wb_prod_list.pkl',
+                        'pkl_backup_path': '/home/analyst1/www/price_monitor/wb/wb_prod_list.pkl',
                         'category_url_list': wb_category_url_list,
                         'price_limit': wb_price_limit
                     },
                     dag=dag)
 
-t3 = PythonOperator(task_id='wb_save_prod_list_data',
-                    python_callable=monitor_tools_wb.save_prod_list_data,
+t3 = PythonOperator(task_id='wb_save_prod_list_json_data',
+                    python_callable=monitor_tools_wb.save_prod_list_with_json_data,
                     op_kwargs={
                         'prod_list_db_name': 'monitor_wb_prod_list',
                         'db_creds': PG_BF_USER_ENGINE,
-                        'pkl_backup_path': '/home/analyst1/www/price_monitor/wb_prod_list_data.pkl'
+                        'pkl_backup_path': '/home/analyst1/www/price_monitor/wb/wb_prod_list_data.pkl'
                     },
                     dag=dag)
 

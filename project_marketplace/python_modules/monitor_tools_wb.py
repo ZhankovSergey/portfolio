@@ -3,7 +3,6 @@
     1) парсинга товаров и информации по ним с wildberries.ru
     2) создания базы данных с мониторингом цен товаров конкурентов, соответствующих нашим товарам
 """
-
 import requests
 import json
 import pandas as pd
@@ -34,7 +33,7 @@ def get_product_list_from_cat_pages(category_url_list: list, chrome_driver_path:
                         и все спарсить нельзя из-за ограничений WB.
                         Тогда парсится по диапазонам цен пока не достигнет price_limit.
 
-    :return: датафрейм с колонками (id товара, ссылка на карточку товара, ссылка на джейсон с данными карточки товара)
+    :return: датафрейм с колонками (id товара, ссылка на карточку товара, ссылка на джейсон карточки)
     """
 
     options = webdriver.ChromeOptions()
@@ -150,9 +149,6 @@ def get_product_list_from_cat_pages(category_url_list: list, chrome_driver_path:
             products_list.reset_index(inplace=True)
             products_list.drop(columns='index', inplace=True)
 
-    #except Exception as error:
-    #    print(error)
-
     finally:
         if browser:
             browser.quit()
@@ -160,23 +156,19 @@ def get_product_list_from_cat_pages(category_url_list: list, chrome_driver_path:
     return products_list
 
 
-def save_product_list_from_cat_pages(db_creds: str,
-                                     db_name: str,
-                                     chrome_driver_path: str,
+def save_product_list_from_cat_pages(chrome_driver_path: str,
                                      pkl_backup_path: str,
                                      category_url_list: list,
                                      price_limit: int):
     """
     Обновляет список урлов товаров для парсинга в базе данных и сохраняет на сервере в pkl.
 
-    :param db_name: имя таблицы в базе
-    :param db_creds: данные для инициализации движка базы вида 'postgresql+psycopg2://user:pass@host:port/db_name'
     :param chrome_driver_path: путь до исполняемого файла хром драйвера
     :param pkl_backup_path: путь для сохранения данных в pkl
     :param category_url_list: список урлов категорий/подкатегорий вида https://www.wildberries.ru/catalog/category_name?sort=popular&page=1
     :param price_limit: верхняя граница поиска товаров по цене (актуально для категорий,
                         где больше 10 000 товаров и все спарсить нельзя из-за ограничений WB.
-                        Тогда парсится по диапазонам цен пока не достигнет price_limit.
+                        Тогда парсится частями - по диапазонам цен, пока не достигнет price_limit.
     """
 
     # получение данных
@@ -186,161 +178,12 @@ def save_product_list_from_cat_pages(db_creds: str,
     with open(pkl_backup_path, 'wb') as file:
         pickle.dump(wb_product_list, file)
 
-    # сохранение в базу данных
-    engine = create_engine(db_creds, echo=True)
-    try:
-        wb_product_list.to_sql(
-            db_name,
-            engine,
-            if_exists='replace',
-            index=False)
-    finally:
-        engine.dispose()
-
-
-def get_our_stock_data(chrome_driver_path: str,
-                       db_creds: str) -> pd.DataFrame:
-    """
-    Парсинг данных с сайта WB о наших товарах на стоке.
-
-    :param chrome_driver_path: путь до исполняемого файла хром драйвера
-    :param db_creds: данные для инициализации движка базы вида 'postgresql+psycopg2://user:pass@host:port/db_name'
-
-    :return: датафрейм с данными о наших товарах с карточек wb
-    """
-
-    # получение нашего стока из базы
-    sql_query = '''
-                SELECT *
-                FROM
-                    (SELECT
-                        "nmId",
-                        article AS article
-                    FROM wb_products_info
-                    WHERE stock > 0
-                    UNION
-                    SELECT
-                        "nmId",
-                        "supplierArticle" AS article
-                    FROM wb_stat_stocks
-                    WHERE quantity > 0) AS prod_info
-                LEFT JOIN (SELECT
-                            "nmId",
-                            price_with_disc::int
-                          FROM wb_prices_info) AS price_info USING ("nmId")
-                '''
-
-    engine = create_engine(db_creds, echo=True)
-    try:
-        wb_stock = pd.read_sql(sql_query, con=engine)
-    finally:
-        engine.dispose()
-
-    wb_stock['url'] = 'https://www.wildberries.ru/catalog/' + wb_stock.nmId + '/detail.aspx'
-
-    # инициализация хром драйвера в фоновом режиме
-    options = webdriver.ChromeOptions()
-    options.add_argument('--ignore-certificate-errors')
-    options.add_argument('--incognito')
-    options.add_argument('--headless')
-    options.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome(chrome_driver_path, chrome_options=options)
-
-    our_products_cards_info = pd.DataFrame()
-
-    try:
-        # парсинг данных с карточки
-        for i in range(wb_stock.shape[0]):
-            # получение ссылки на json с описанием товара
-            print(f'{i} {wb_stock.url[i]}')
-            driver.get(wb_stock.url[i])
-            sleep(2)
-            html_data = BeautifulSoup(driver.page_source, 'html5lib')
-            img_src_elem = html_data.find(class_='slide__content img-plug j-wba-card-item')
-
-            while (img_src_elem == None) and (html_data.h1 == None):
-                print('img_src_elem == None')
-                driver.get(wb_stock.url[i])
-                sleep(2)
-                html_data = BeautifulSoup(driver.page_source, 'html5lib')
-                img_src_elem = html_data.find(class_='slide__content img-plug j-wba-card-item')
-
-            if html_data.h1.text == 'По Вашему запросу ничего не найдено':
-                continue
-
-            img_src = html_data.find(class_='slide__content img-plug j-wba-card-item').img['src']
-            json_src = 'https:' + img_src.split('images')[0] + 'info/ru/card.json'
-            print(json_src)
-
-            # загрузка описания о товаре в датафрейм
-            try:
-                json_data = requests.get(json_src).text
-            except Exception as error:
-                print(error)
-                continue
-
-            data = json.loads(json_data)
-            our_products_cards_info = pd.concat([our_products_cards_info, pd.json_normalize(data)])
-
-            sleep(1)
-
-        our_products_cards_info.reset_index(inplace=True)
-        our_products_cards_info.drop(columns='index', inplace=True)
-
-        # распаковка колонки options
-        print('распаковка колонки options')
-        options = pd.DataFrame()
-        for i in range(our_products_cards_info.shape[0]):
-            if type(our_products_cards_info.options[i]) is not float:
-                options_temp = pd.json_normalize(our_products_cards_info['options'][i])
-                options_temp = options_temp[['name', 'value']]
-                options_temp['index'] = '1'
-                options_temp = options_temp.pivot(columns='name', values='value', index='index')
-                options_temp['nm_id'] = our_products_cards_info['nm_id'][i]
-                options = pd.concat([options, options_temp])
-
-        # мердж, дроп ненужных колонок и финальные преобразования типов данных
-        our_products_cards_info.drop(columns=['grouped_options', 'options'], inplace=True)
-        our_products_cards_info = our_products_cards_info.merge(options, on='nm_id', how='left')
-
-        our_products_cards_info['nm_id'] = our_products_cards_info.nm_id.astype('str')
-        our_products_cards_info['imt_id'] = our_products_cards_info.imt_id.astype('str')
-
-        # финальный мердж с wb_stock
-        our_products_cards_info = wb_stock.merge(our_products_cards_info, left_on='nmId', right_on='nm_id', how='left')
-
-    except Exception as error:
-        print(error)
-
-    finally:
-        if driver:
-            driver.quit()
-
-    return our_products_cards_info
-
-
-def save_our_stock_data(db_creds: str,
-                        chrome_driver_path: str,
-                        pkl_backup_path: str):
-    """
-    Сохраняет актуальную информацию с сайта wb о наших товарах на стоке.
-
-    :param db_creds: данные для инициализации движка базы вида 'postgresql+psycopg2://user:pass@host:port/db_name'
-    :param chrome_driver_path: путь до исполняемого файла хром драйвера
-    :param pkl_backup_path: путь для сохранения датафрейма в pkl
-    """
-
-    wb_our_stock = get_our_stock_data(chrome_driver_path, db_creds)
-
-    with open(pkl_backup_path, 'wb') as file:
-        pickle.dump(wb_our_stock, file)
-
 
 def parse_product_cards_data_json(prod_list: pd.DataFrame):
     """
     Функция для парсинга параметров товаров, которые можно достать из джейсона карточки на сайте WB.
 
-    :param prod_list: датафрейм в ктором есть колонки: json_src - урл джейсона карточки, nm_id - id товара
+    :param prod_list: датафрейм в котором есть 2 колонки: json_src - урл джейсона карточки, nm_id - id товара
 
     :return: исходный датафрейм обогащенный данными из джейсонов карточек товаров
     """
@@ -396,7 +239,6 @@ def parse_product_cards_data(prod_list: pd.DataFrame,
                              param_json_src=False) -> pd.DataFrame:
     """
     Функция для парсинга параметров товаров, которые можно достать из карточки на сайте WB.
-    Сейчас парсятся цена со сидкой и название продавца.
 
     :param prod_list: датафрейм в котором есть колонка url - урл карточки
     :param chrome_driver_path: путь до исполняемого файла хром драйвера
@@ -458,9 +300,9 @@ def parse_product_cards_data(prod_list: pd.DataFrame,
     return prod_list
 
 
-def save_prod_list_data(prod_list_db_name: str,
-                        db_creds: str,
-                        pkl_backup_path: str):
+def save_prod_list_with_json_data(prod_list_db_name: str,
+                                  db_creds: str,
+                                  pkl_backup_path: str):
     """
     Парсит информацию из джейсона карточек товаров по списку и сохраняет на сервер.
 
@@ -482,6 +324,66 @@ def save_prod_list_data(prod_list_db_name: str,
         pickle.dump(prod_list_data, file)
 
 
+def get_our_stock_data(chrome_driver_path: str,
+                       db_creds: str) -> pd.DataFrame:
+    """
+    Парсинг данных с сайта WB о наших товарах на стоке.
+
+    :param chrome_driver_path: путь до исполняемого файла хром драйвера
+    :param db_creds: данные для инициализации движка базы вида 'postgresql+psycopg2://user:pass@host:port/db_name'
+
+    :return: датафрейм с данными о наших товарах с карточек wb
+    """
+
+    # получение нашего стока из базы
+    sql_query = '''
+                    SELECT
+                        "nmId" AS nm_id,
+                        article AS article
+                    FROM wb_products_info
+                    WHERE stock > 0
+                    UNION
+                    SELECT
+                        "nmId" AS nm_id,
+                        "supplierArticle" AS article
+                    FROM wb_stat_stocks
+                    WHERE quantity > 0
+                '''
+
+    engine = create_engine(db_creds, echo=True)
+    try:
+        our_stock = pd.read_sql(sql_query, con=engine)
+    finally:
+        engine.dispose()
+
+    our_stock['url'] = 'https://www.wildberries.ru/catalog/' + our_stock.nm_id + '/detail.aspx'
+
+    # обогащение данными с карточки
+    our_stock = parse_product_cards_data(our_stock, chrome_driver_path, param_json_src=True)
+
+    # обогащение данными из джейсона карточки
+    our_stock = parse_product_cards_data_json(our_stock)
+
+    return our_stock
+
+
+def save_our_stock_data(db_creds: str,
+                        chrome_driver_path: str,
+                        pkl_backup_path: str):
+    """
+    Сохраняет актуальную информацию с сайта wb о наших товарах на стоке.
+
+    :param db_creds: данные для инициализации движка базы вида 'postgresql+psycopg2://user:pass@host:port/db_name'
+    :param chrome_driver_path: путь до исполняемого файла хром драйвера
+    :param pkl_backup_path: путь для сохранения датафрейма в pkl
+    """
+
+    our_stock = get_our_stock_data(chrome_driver_path, db_creds)
+
+    with open(pkl_backup_path, 'wb') as file:
+        pickle.dump(our_stock, file)
+
+
 def prices_update(engine_creds, chrome_driver_path):
     """
     Обновляет цены конкурентов в таблице мониторинга
@@ -499,9 +401,9 @@ def prices_update(engine_creds, chrome_driver_path):
     try:
         # загрузка списка товаров wb в текущем списке мониторинга
         sql_query = f'''
-                         SELECT id, url
-                         FROM monitor_mp_prices
-                         WHERE {where_condition}
+                        SELECT id, url
+                        FROM monitor_mp_prices
+                        WHERE {where_condition}
                      '''
 
         prod_list = pd.read_sql(sql_query, con=db_engine)
