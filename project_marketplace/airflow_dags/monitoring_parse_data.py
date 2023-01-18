@@ -61,9 +61,8 @@ t2 = PythonOperator(task_id='wb_save_product_list_from_cat_pages',
 t3 = PythonOperator(task_id='wb_save_prod_list_json_data',
                     python_callable=monitor_tools_wb.save_prod_list_with_json_data,
                     op_kwargs={
-                        'prod_list_db_name': 'monitor_wb_prod_list',
-                        'db_creds': PG_BF_USER_ENGINE,
-                        'pkl_backup_path': '/home/analyst1/www/price_monitor/wb/wb_prod_list_data.pkl'
+                        'prod_list_pkl_path': '/home/analyst1/www/price_monitor/wb/wb_prod_list.pkl',
+                        'wb_prod_list_data_pkl_save_path': '/home/analyst1/www/price_monitor/wb/wb_prod_list_data.pkl'
                     },
                     dag=dag)
 

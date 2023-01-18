@@ -300,27 +300,21 @@ def parse_product_cards_data(prod_list: pd.DataFrame,
     return prod_list
 
 
-def save_prod_list_with_json_data(prod_list_db_name: str,
-                                  db_creds: str,
-                                  pkl_backup_path: str):
+def save_prod_list_with_json_data(prod_list_pkl_path: str,
+                                  wb_prod_list_data_pkl_save_path: str):
     """
     Парсит информацию из джейсона карточек товаров по списку и сохраняет на сервер.
 
-    :param prod_list_db_name: база данных со списком товаров, где есть урл джейсона карточки
-    :param db_creds: данные для инициализации движка базы вида 'postgresql+psycopg2://user:pass@host:port/db_name'
-    :param pkl_backup_path: путь для сохранения данных в pkl
+    :param prod_list_pkl_path: путь до сохраненного в pkl датафрейма с товарами
+    :param wb_prod_list_data_pkl_save_path: путь для сохранения данных в pkl
     """
 
-    # получение списка товаров для парсинга
-    engine = create_engine(db_creds, echo=True)
-    try:
-        prod_list = pd.read_sql_table(prod_list_db_name, con=engine)
-    finally:
-        engine.dispose()
+    with open(prod_list_pkl_path, 'rb') as prod_list_pkl:
+        prod_list = pickle.load(prod_list_pkl)
 
     prod_list_data = parse_product_cards_data_json(prod_list)
 
-    with open(pkl_backup_path, 'wb') as file:
+    with open(wb_prod_list_data_pkl_save_path, 'wb') as file:
         pickle.dump(prod_list_data, file)
 
 
