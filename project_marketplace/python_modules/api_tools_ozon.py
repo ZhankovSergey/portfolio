@@ -9,7 +9,7 @@ from PyPDF2 import PdfFileMerger
 import time
 from datetime import timedelta, date
 
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from sqlalchemy import create_engine
 from sqlalchemy import text
 from os import listdir

@@ -12,7 +12,7 @@ PG_BF_USER_ENGINE = getenv('PG_BF_USER_ENGINE')
 
 sys.path.append(MODULES_DIR)
 import db_tools
-import api_tools_ozon, api_tools_wb, api_tools_yandex
+import api_tools_ozon, api_tools_wb
 
 default_args = {
     'owner': 'admin',
@@ -61,5 +61,18 @@ t3 = PythonOperator(task_id='wb_stocks_update',
                         'article_col_name': 'sku'
                     },
                     dag=dag)
+
+# t4 = PythonOperator(task_id='yandex_skus_info_stocks_update',
+#                     python_callable=db_tools.update_stock_if_bigger,
+#                     op_args=[],
+#                     op_kwargs={
+#                         'func': api_tools_yandex.get_skus_info,
+#                         'db_creds': PG_BF_USER_ENGINE,
+#                         'db_table': 'yandex_skus_info_daily',
+#                         'db_date_col_name': 'date',
+#                         'stocks_col_name': 'stock_plus_reserved',
+#                         'article_col_name': 'shopSku'
+#                     },
+#                     dag=dag)
 
 t1 >> t2 >> t3

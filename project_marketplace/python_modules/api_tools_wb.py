@@ -9,6 +9,7 @@ from sqlalchemy import text
 from os import getenv
 from dotenv import load_dotenv
 load_dotenv()
+
 WB_API_KEY = getenv('WB_API_KEY')
 WB_API_KEY_X64 = getenv('WB_API_KEY_X64')
 
@@ -78,7 +79,7 @@ def get_products_info() -> pd.DataFrame:
     return prod_info
 
 
-def products_info_db_update(db_creds, table_name, api_key):
+def products_info_db_update(db_creds, table_name):
     """
     Updates db table (wb_products_info)
     """
@@ -103,7 +104,7 @@ def products_info_db_update(db_creds, table_name, api_key):
         engine.dispose()
 
 
-def products_info_to_db_daily(db_creds, table_name, api_key):
+def products_info_to_db_daily(db_creds, table_name):
     """
     Updates db table (wb_products_info_daily)
     """
@@ -217,7 +218,7 @@ def get_stocks() -> pd.DataFrame:
         for barcode in stat_stocks_barcode_list:
             headers = {
                 'accept': 'application/json',
-                'Authorization': getenv('WB_API_KEY'),
+                'Authorization': WB_API_KEY,
                 'Content-Type': 'application/json'
             }
 

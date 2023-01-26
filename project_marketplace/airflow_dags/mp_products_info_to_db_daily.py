@@ -47,8 +47,7 @@ t3 = PythonOperator(task_id='wb_products_info_to_db_daily',
                     python_callable=api_tools_wb.products_info_to_db_daily,
                     op_kwargs={
                         'db_creds': PG_BF_USER_ENGINE,
-                        'table_name': 'wb_products_info_daily',
-                        'api_key': WB_API_KEY
+                        'table_name': 'wb_products_info_daily'
                     },
                     dag=dag)
 

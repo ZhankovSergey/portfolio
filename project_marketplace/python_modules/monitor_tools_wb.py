@@ -6,7 +6,7 @@
 import requests
 import json
 import pandas as pd
-import random
+from random import randint
 from bs4 import BeautifulSoup
 import re
 from time import sleep
@@ -62,24 +62,18 @@ def get_product_list_from_cat_pages(category_url_list: list, chrome_driver_path:
 
                 while max_price <= price_limit:
                     page_url = category_url + f'&priceU={min_price}00%3B{max_price}00'
-
-                    # получение кол-ва товаров по заданному фильтру
                     browser.get(page_url)
-                    prod_cnt_elem = WebDriverWait(browser, 60).until(
-                        EC.visibility_of_element_located((By.CSS_SELECTOR, ".goods-count"))).text
-
-                    prod_cnt = int(re.sub("[^0-9]", "", prod_cnt_elem))
 
                     # получение датафрейма со списком товаров по заданному фильтру
                     current_page = 1
-
                     while current_page < 101:
                         print(browser.current_url)
-                        for i in range(25):
+                        for i in range(100):
                             ActionChains(browser).scroll_by_amount(1, 1000).perform()
 
                         html_data = BeautifulSoup(browser.page_source, 'html5lib')
                         product_cards = html_data.find_all(class_='product-card__wrapper')
+                        print(len(product_cards))
 
                         for item in product_cards:
                             nm_id = item.img['src'].split('/')[5]
@@ -94,7 +88,7 @@ def get_product_list_from_cat_pages(category_url_list: list, chrome_driver_path:
                         try:
                             next_page_link = browser.find_element(By.CLASS_NAME, 'pagination-next')
                             next_page_link.send_keys(Keys.ENTER)
-                            sleep(random.randint(1, 3))
+                            sleep(randint(1, 3))
                         except NoSuchElementException:
                             break
 
@@ -118,11 +112,12 @@ def get_product_list_from_cat_pages(category_url_list: list, chrome_driver_path:
 
                 while current_page <= cat_prod_cnt // 100 + 1:
                     print(browser.current_url)
-                    for i in range(25):
+                    for i in range(100):
                         ActionChains(browser).scroll_by_amount(1, 1000).perform()
 
                     html_data = BeautifulSoup(browser.page_source, 'html5lib')
                     product_cards = html_data.find_all(class_='product-card__wrapper')
+                    print(len(product_cards))
 
                     for item in product_cards:
                         nm_id = item.img['src'].split('/')[5]
@@ -138,7 +133,7 @@ def get_product_list_from_cat_pages(category_url_list: list, chrome_driver_path:
                         next_page_link = browser.find_element(By.CLASS_NAME, 'pagination-next')
                         next_page_link.send_keys(Keys.ENTER)
                         current_page += 1
-                        sleep(random.randint(1, 3))
+                        sleep(randint(1, 3))
                     except NoSuchElementException:
                         break
 
@@ -285,8 +280,11 @@ def parse_product_cards_data(prod_list: pd.DataFrame,
                     prod_list.seller_name[i] = seller_info_elem.text
 
             if param_json_src:
-                img_src = html_data.find(class_='slide__content img-plug j-wba-card-item').img['src']
-                prod_list.json_src[i] = 'https:' + img_src.split('images')[0] + 'info/ru/card.json'
+                img_elem = html_data.find(class_='slide__content img-plug j-wba-card-item')
+                if img_elem is None:
+                    prod_list.json_src[i] = ''
+                else:
+                    prod_list.json_src[i] = 'https:' + img_elem.img['src'].split('images')[0] + 'info/ru/card.json'
 
             print(f'{i} {prod_list.url[i]}')
 

@@ -21,14 +21,14 @@ default_args = {
 
 dag = DAG('mp_realization_to_db',
           default_args=default_args,
-          schedule_interval='10 13 * * 1')
+          schedule_interval='20 5 * * 2')
 
 
 wb_realization = PythonOperator(task_id='wb_realization_to_db',
                                 python_callable=api_tools_wb.realization_to_postgre,
                                 op_kwargs={
-                                    'date_from': date.today()-timedelta(days=7),
-                                    'date_to': date.today()-timedelta(days=1),
+                                    'date_from': date.today()-timedelta(days=8),
+                                    'date_to': date.today()-timedelta(days=2),
                                     'db_creds': PG_BF_USER_ENGINE,
                                     'table_name': 'wb_realization'
                                 },
